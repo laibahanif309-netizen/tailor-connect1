@@ -1,0 +1,19 @@
+{
+  "name": "tailorconnect",
+  "version": "1.0.0",
+  "description": "TailorConnect - Tailor/Designer Marketplace App",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev:frontend": "cd frontend && npm start",
+    "dev:backend": "cd backend && npm run dev",
+    "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install"
+  },
+  "author": "",
+  "license": "ISC"
+}
+
+

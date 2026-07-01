@@ -1,0 +1,374 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  customer
+  tailor
+  admin
+}
+
+enum UserStatus {
+  active
+  inactive
+  suspended
+}
+
+enum AvailabilityStatus {
+  available
+  unavailable
+  busy
+}
+
+enum OrderStatus {
+  pending
+  confirmed
+  in_progress
+  completed
+  cancelled
+}
+
+enum MessageType {
+  text
+  image
+}
+
+enum HomeVisitStatus {
+  pending
+  confirmed
+  completed
+  cancelled
+}
+
+enum NotificationType {
+  order_placed
+  order_status_changed
+  new_message
+  review_received
+  booking_requested
+  booking_confirmed
+  system
+}
+
+enum StitchingType {
+  mens
+  womens
+  childrens
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  token     String    @unique
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model User {
+  id              String      @id @default(uuid())
+  email           String      @unique
+  username        String?     @unique
+  passwordHash    String
+  role            UserRole
+  status          UserStatus  @default(active)
+  fullName        String?
+  phone           String?
+  profileImageUrl String?
+  lastLoginAt     DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  deletedAt       DateTime?
+
+  tailorProfile      TailorProfile?
+  customerProfile    CustomerProfile?
+  adminProfile       AdminProfile?
+  customerOrders     Order[]                    @relation("CustomerOrders")
+  conversations      ConversationParticipant[]
+  sentMessages       Message[]                  @relation("MessageSender")
+  reviewsWritten     Review[]                   @relation("ReviewAuthor")
+  notifications      Notification[]             @relation("UserNotifications")
+  notificationsActor Notification[]             @relation("NotificationActors")
+  homeVisitsBooked   HomeVisit[]                @relation("HomeVisitsByCustomer")
+  userStatusAudits   UserStatusAudit[]          @relation("UserStatusTarget")
+  statusChangesMade  UserStatusAudit[]          @relation("UserStatusActor")
+  passwordResetTokens PasswordResetToken[]
+
+  @@index([role])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model CustomerProfile {
+  id         String   @id @default(uuid())
+  userId     String   @unique
+  address    String?
+  city       String?
+  state      String?
+  postalCode String?
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model TailorProfile {
+  id                 String             @id @default(uuid())
+  userId             String             @unique
+  businessName       String
+  location           String
+  description        String?
+  yearsOfExperience  Int                @default(0)
+  specializations    String[]
+  averageRating      Decimal            @default(0) @db.Decimal(3, 2)
+  totalReviews       Int                @default(0)
+  isAvailable        Boolean            @default(true)
+  availabilityStatus AvailabilityStatus @default(available)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fabrics        Fabric[]
+  portfolioItems PortfolioItem[]
+  orders         Order[]           @relation("TailorOrders")
+  reviews        Review[]          @relation("ReviewRecipient")
+  homeVisits     HomeVisit[]       @relation("HomeVisitsForTailor")
+
+  @@index([businessName])
+  @@index([location])
+  @@index([averageRating])
+  @@index([isAvailable, availabilityStatus])
+}
+
+model AdminProfile {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Fabric {
+  id          String   @id @default(uuid())
+  tailorId    String
+  name        String
+  priceCents  Int
+  description String?
+  imageUrl    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tailor TailorProfile @relation(fields: [tailorId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@index([tailorId, isActive])
+  @@index([tailorId, createdAt])
+}
+
+model PortfolioItem {
+  id          String   @id @default(uuid())
+  tailorId    String
+  imageUrl    String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tailor TailorProfile @relation(fields: [tailorId], references: [id], onDelete: Cascade)
+
+  @@index([tailorId, createdAt])
+}
+
+model Order {
+  id                  String       @id @default(uuid())
+  orderNumber         String       @unique
+  customerId          String
+  tailorId            String
+  fabricId            String?
+  stitchingType       StitchingType
+  status              OrderStatus  @default(pending)
+  deliveryAddress     String
+  deliveryDate        DateTime
+  specialInstructions String?
+  isExpress           Boolean      @default(false)
+  fabricPriceCents    Int          @default(0)
+  expressFeeCents     Int          @default(0)
+  totalCents          Int
+  cancelledAt         DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  customer      User               @relation("CustomerOrders", fields: [customerId], references: [id], onDelete: Restrict)
+  tailor        TailorProfile      @relation("TailorOrders", fields: [tailorId], references: [id], onDelete: Restrict)
+  fabric        Fabric?            @relation(fields: [fabricId], references: [id], onDelete: SetNull)
+  measurements  OrderMeasurement?
+  statusHistory OrderStatusHistory[]
+  review        Review?
+  messages      Message[]
+  conversations Conversation[]
+
+  @@index([customerId, createdAt])
+  @@index([tailorId, status, createdAt])
+  @@index([status, createdAt])
+  @@index([deliveryDate])
+}
+
+model OrderMeasurement {
+  id              String   @id @default(uuid())
+  orderId          String   @unique
+  unit             String   @default("cm")
+  measurementsJson Json
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model OrderStatusHistory {
+  id        String      @id @default(uuid())
+  orderId   String
+  status    OrderStatus
+  note      String?
+  createdAt DateTime    @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+}
+
+model Conversation {
+  id            String                    @id @default(uuid())
+  orderId        String?
+  lastMessageAt  DateTime?
+  lastMessageId  String?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  participants   ConversationParticipant[]
+  messages       Message[]
+  order          Order?                   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([lastMessageAt])
+  @@index([orderId])
+}
+
+model ConversationParticipant {
+  id             String       @id @default(uuid())
+  conversationId String
+  userId         String
+  joinedAt       DateTime     @default(now())
+  lastReadAt     DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId, joinedAt])
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  senderId       String
+  orderId        String?
+  type           MessageType  @default(text)
+  content        String?
+  imageUrl       String?
+  isRead         Boolean      @default(false)
+  readAt         DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation("MessageSender", fields: [senderId], references: [id], onDelete: Restrict)
+  order        Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt])
+  @@index([senderId, createdAt])
+}
+
+model Review {
+  id           String       @id @default(uuid())
+  orderId       String       @unique
+  authorId      String
+  tailorId      String
+  rating        Int
+  comment       String
+  isVisible     Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  order  Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  author User          @relation("ReviewAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  tailor TailorProfile @relation("ReviewRecipient", fields: [tailorId], references: [id], onDelete: Restrict)
+
+  @@index([tailorId, createdAt])
+  @@index([authorId, createdAt])
+}
+
+model HomeVisit {
+  id            String          @id @default(uuid())
+  customerId    String
+  tailorId      String
+  requestedDate DateTime
+  timeSlot      String
+  address       String
+  phone         String
+  purpose       String?
+  status        HomeVisitStatus @default(pending)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  customer User         @relation("HomeVisitsByCustomer", fields: [customerId], references: [id], onDelete: Restrict)
+  tailor   TailorProfile @relation("HomeVisitsForTailor", fields: [tailorId], references: [id], onDelete: Restrict)
+
+  @@index([tailorId, status, requestedDate])
+  @@index([customerId, createdAt])
+}
+
+model Notification {
+  id         String           @id @default(uuid())
+  userId      String
+  actorId     String?
+  type        NotificationType
+  title       String
+  body        String
+  isRead      Boolean          @default(false)
+  readAt      DateTime?
+  metadata    Json?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  user  User  @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  actor User? @relation("NotificationActors", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([userId, isRead, createdAt])
+  @@index([type, createdAt])
+}
+
+model UserStatusAudit {
+  id           String     @id @default(uuid())
+  targetUserId String
+  actorUserId  String?
+  fromStatus   UserStatus
+  toStatus     UserStatus
+  reason       String?
+  createdAt    DateTime   @default(now())
+
+  targetUser User  @relation("UserStatusTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
+  actorUser  User? @relation("UserStatusActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([targetUserId, createdAt])
+  @@index([actorUserId, createdAt])
+}
