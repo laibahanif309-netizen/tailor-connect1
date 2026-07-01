@@ -1,4 +1,0 @@
-Current Color palette:
- #2C3E50,
-#F8F9FA, 
-#C9A227
